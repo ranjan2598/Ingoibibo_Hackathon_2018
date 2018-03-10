@@ -55,9 +55,11 @@ function userMessageReceived(params) {
 
     		// check if user sent a valid option
     		try {
-    			const selectedHotel = info.hotels[parseInt(message)];
+    			const selectedHotel = info.hotels[parseInt(message) - 1];
     			console.log('Proceed booking: ', selectedHotel);
+
     			// todo- proceed with booking
+    			completeBooking(selectedHotel, userMobile);
     		} catch (e) {
     			console.log(e, 'user made an invalid selection');
 
@@ -137,12 +139,16 @@ function hotelierMessageReceived(params) {
 }
 
 function newUserRequestReceived(userMobile, params) {
+	let messageToBeSent = 'We are negotiating exclusive deals with hotels near you. Please wait for 60 seconds...';
+
+	sendWhatsappMessage(userMobile, messageToBeSent);
+
 	let url = 'http://ppin1.goibibo.com/api/hotels/nearby-info/';
 
 	// send Users options after 60 secs
 	setTimeout(() => {
 		mergeHotelDetailsAndSendToUser(userMobile);
-	}, 25 * 1000); // todo 1 mins
+	}, 30 * 1000); // todo 1 mins
 
     request.post({
     	url: url
@@ -178,12 +184,83 @@ function newUserRequestReceived(userMobile, params) {
     		    	});
     		    });
 
-    		    mapHotelierToUser(0, hotels, userMobile, hotelierWhatsappMessage);
+    		    mapHotelierToUser(0, hotels, userMobile);
 
 	    	} else {
 	    		console.log(response.body.detail);
 	    	}
 	    }
+    });
+}
+
+function completeBooking(hotel, userMobile) {
+	redisApi.getKey(hotel.hotelcode, function failure(err) {
+        console.log(err);
+    }, function success(value) {
+    	const completeHotelDetails = JSON.parse(value);
+
+    	completeHotelDetails.city = 'Bangalore';
+    	completeHotelDetails.city = '';
+    	completeHotelDetails.booking_type = 'offline';
+        completeHotelDetails.totalrent = 7742;
+        completeHotelDetails.uname = 'test';
+        completeHotelDetails.umail = 'ranjan.agarwal@go-mmt.com';
+        completeHotelDetails.bypass_inventory = true;
+        completeHotelDetails.allow_pah = 1;
+        completeHotelDetails.pahathotelflag = 1;
+        completeHotelDetails.checkin = '2018-03-11';
+		completeHotelDetails.checkout = '2018-03-12';
+		completeHotelDetails.noofrooms = 1;
+		completeHotelDetails.adultroom1 = 1;
+		completeHotelDetails.roomcode = completeHotelDetails.roomlist[0].roomtypecode;
+		completeHotelDetails.rateplancode = completeHotelDetails.roomlist[0].rateplancode;
+		completeHotelDetails.pricingdetail = {
+		    pricetype: 'sr',
+		    pricebreakup: [{
+		        '2018-03-11': {
+			        'adultrate': completeHotelDetails.roomlist[0].totalcharges,
+			        'extraadultrate': 0
+			    }
+		    }]
+		};
+
+    	
+    	const url = 'http://ppin.goibibo.com/api/v1/booking/direct-booking/';
+    	//console.log(completeHotelDetails);
+    	request.post({
+    		url: url,
+    		form: completeHotelDetails,
+    		headers: {
+    			'Authorization': 'Token ea1374a6b6cd43a84b9c561ecbd838c937a6e5ac'
+    		}
+    	}, function optionalcallback(error, response, body) {
+    		if (error) {
+    		    console.log('err', error);
+    		} else {
+    			response.body = JSON.parse(response.body);
+    			if (response && response.body) {
+    				if (response.body.success) {
+    					const data = {
+    						hotelName: response.body.message.bookingresult.hotelname,
+    						bookingid: response.body.message.bookingresult.bookingid,
+    						price: completeHotelDetails.roomlist[0].totalcharges,
+    						lattitude: completeHotelDetails.lattitude,
+    						longitude: completeHotelDetails.longitude,
+    						urlEncodedHotelName: response.body.message.bookingresult.hotelname.split(' ').join('+')
+    					};
+    					sendWhatsappMessage(userMobile, 'Your booking at ' + data.hotelName + ' has been confirmed. ' + 
+    						    'Booking id for further reference is ' + data.bookingid + '. ' +
+    						    'You can check-in anytime now and pay  Rs. ' + data.price + ' at hotel. ' +
+    						    'Hotel Location: https://www.google.com/maps/?q=' + data.urlEncodedHotelName + '&ll=' +
+    						    data.lattitude + ',' + data.longitude +' Have a pleasant stay!');
+    				} else {
+    					sendWhatsappMessage(userMobile, 'Sorry. Something bad happened. :(');
+    					console.log(response.body);
+    				}
+    				
+    			}
+    		}
+    	});
     });
 }
 
@@ -214,10 +291,17 @@ function mergeHotelDetails(index, hotels, userMobile) {
 		//console.log(hotels);
 		let messageToBeSent = '';
 		for (let i = 0; i < hotels.length; i++) {
+			if (hotels[i].roomlist && hotels[i].roomlist[0]) {
+			} else {
+				hotels[i].roomlist = [{}]; // code was breaking, todo: do proper fix
+			}
+			
 			messageToBeSent += (i + 1 + '.');
 			messageToBeSent += (hotels[i].name + '\\n');
-			messageToBeSent += ('Rating: ' + hotels[i].rating + '\\n');
-			messageToBeSent += ('Total Charge: ' + hotels[i].roomlist[0].totalcharges + '\\n');
+			messageToBeSent += ('go rating: ' + hotels[i].rating + '/ 5\\n');
+			messageToBeSent += '*' + hotels[i].roomlist[0].roomtypename + '*\\n';
+			messageToBeSent += ('Amount to be paid at hotel: ' + hotels[i].roomlist[0].totalcharges) + '\\n';
+				    //' (50% off exclusive deal)');
 			messageToBeSent += '\\n';
 		}
 
@@ -225,7 +309,7 @@ function mergeHotelDetails(index, hotels, userMobile) {
 	}
 }
 
-function mapHotelierToUser(index, hotels, userMobile, hotelierWhatsappMessage) {
+function mapHotelierToUser(index, hotels, userMobile) {
 	
 	if (index < hotels.length) {
 		const hotel = hotels[index];
@@ -235,8 +319,7 @@ function mapHotelierToUser(index, hotels, userMobile, hotelierWhatsappMessage) {
 		    console.log(err);
 		}, function success(reply) {
 		    console.log('hotelier ' + hotel.mobile + ' mapped with user ' + userMobile);
-		    sendWhatsappMessage(hotel.mobile, hotelierWhatsappMessage);
-		    mapHotelierToUser(index, hotels, userMobile, hotelierWhatsappMessage);
+		    mapHotelierToUser(index, hotels, userMobile);
 		});
 
 	} 
@@ -262,11 +345,15 @@ function addNameAndSaveHotelsToRedis(hotels) {
 		response.body = JSON.parse(response.body);
 		if (response && response.body && response.body.data) {
 			const receivedData = response.body.data;
+			//console.log(receivedData);
 
 			// iterate over hotels and add extra infos
 			for (let i = 0; i < hotels.length; i++) {
 				hotels[i].name = receivedData[hotels[i].voyagerid].hotel_geo_node.name;
 				hotels[i].rating = receivedData[hotels[i].voyagerid].hotel_data_node.rating;
+				hotels[i].lattitude = receivedData[hotels[i].voyagerid].hotel_geo_node.location.lat;
+				hotels[i].longitude = receivedData[hotels[i].voyagerid].hotel_geo_node.location.long;
+				//console.log(hotels[i].lattitude, hotels[i].longitude);
 			}
 
 			addPriceAndSaveHotelsToRedis(hotels);
@@ -293,8 +380,8 @@ function addPriceAndSaveHotelsToRedis(hotels) {
 		noofrooms: 1,
 		username: 'goibibo',
 		password: 'g01b1b0321',
-		checkin: '2018-03-10',
-		checkout: '2018-03-11',
+		checkin: '2018-03-11',
+		checkout: '2018-03-12',
 		adultroom1: 1,
 		hotelcodelist: hotelcodelist
 	};
@@ -309,6 +396,7 @@ function addPriceAndSaveHotelsToRedis(hotels) {
 		response.body = JSON.parse(response.body);
 		if (response && response.body && response.body.message) {
 			const receivedData = response.body.message;
+			//console.log(receivedData);
 
 			// iterate over hotels and add extra infos
 			for (let i = 0; i < hotels.length; i++) {
@@ -318,6 +406,8 @@ function addPriceAndSaveHotelsToRedis(hotels) {
 						receivedData[j].voyagerid = hotels[i].voyagerid;
 						receivedData[j].name = hotels[i].name;
 						receivedData[j].rating = hotels[i].rating;
+						receivedData[j].lattitude = hotels[i].lattitude;
+						receivedData[j].longitude = hotels[i].longitude;
 
 						hotels[i] = receivedData[j];
 						break;
@@ -341,9 +431,27 @@ function saveCompleteHotelDetailsToRedis(index, hotels) {
 		    console.log(err);
 		}, function success(reply) {
 		    //console.log('saved hotel: ', hotel);
+		    // send message to hoteliers
+		    if (hotel.roomlist && hotel.roomlist[0]) {
+		    } else {
+		    	hotel.roomlist = [{}]; // code was breaking, todo: do proper fix
+		    }
+
+		    const hotelierData = {
+		    	availableRooms: hotel.roomlist[0].avail,
+		    	price: hotel.roomlist[0].totalcharges,
+		    	roomType: hotel.roomlist[0].roomtypename
+		    };
+		    let hotelierWhatsappMessage = 'Booking Alert! Midnight check-in: A customer is looking for a hotel' +
+		            'room to check-in now and you have ' + hotelierData.availableRooms + ' unsold rooms. ' +
+		            'Do you want to sell ' + hotelierData.roomType + ' at Rs ' + (hotelierData.price / 2) + '? ' +
+		            'Reply with Y to accept the booking before a nearby hotel confirms it.' +
+		            'This opportunity will expire in 60 seconds.';
+		            
+		    sendWhatsappMessage(hotel.mobile, hotelierWhatsappMessage);
 		    saveCompleteHotelDetailsToRedis(index, hotels);
 		});
-	}
+	} 
 }
 
 function sendWhatsappMessage(mobile, message) {
