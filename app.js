@@ -139,7 +139,7 @@ function hotelierMessageReceived(params) {
 }
 
 function newUserRequestReceived(userMobile, params) {
-	let messageToBeSent = 'We are negotiating exclusive deals with hotels near you. Please wait for 60 seconds...';
+	let messageToBeSent = 'We are negotiating exclusive deals with hotels near you. Please wait for 30 seconds...';
 
 	sendWhatsappMessage(userMobile, messageToBeSent);
 
@@ -163,7 +163,7 @@ function newUserRequestReceived(userMobile, params) {
 	    		console.log('hotels: ', hotels);
 
 	    		const hotelierWhatsappMessage = 'Midnight booking received. Want to sell inventory at 50% rate?' +
-	    		        'Reply Y for yes, N for No. Expires in 60 secs';
+	    		        'Reply Y for yes, N for No. Expires in 30 secs';
 
 	    		// will call additional API two add additionals data
 		        addNameAndSaveHotelsToRedis(hotels);
@@ -306,6 +306,7 @@ function mergeHotelDetails(index, hotels, userMobile) {
 		}
 
 		sendWhatsappMessage(userMobile, messageToBeSent);
+		sendWhatsappMessage(userMobile, 'Please select one of them.');
 	}
 }
 
@@ -442,11 +443,11 @@ function saveCompleteHotelDetailsToRedis(index, hotels) {
 		    	price: hotel.roomlist[0].totalcharges,
 		    	roomType: hotel.roomlist[0].roomtypename
 		    };
-		    let hotelierWhatsappMessage = 'Booking Alert! Midnight check-in: A customer is looking for a hotel' +
+		    let hotelierWhatsappMessage = 'Booking Alert! A customer is looking for a hotel' +
 		            'room to check-in now and you have ' + hotelierData.availableRooms + ' unsold rooms. ' +
 		            'Do you want to sell ' + hotelierData.roomType + ' at Rs ' + (hotelierData.price / 2) + '? ' +
 		            'Reply with Y to accept the booking before a nearby hotel confirms it.' +
-		            'This opportunity will expire in 60 seconds.';
+		            'This opportunity will expire in 30 seconds.';
 		            
 		    sendWhatsappMessage(hotel.mobile, hotelierWhatsappMessage);
 		    saveCompleteHotelDetailsToRedis(index, hotels);
@@ -491,7 +492,7 @@ function sendWhatsappMessage(mobile, message) {
 
 // test whatsapp API
 app.get('/', function(req, res, next) {
-	sendWhatsappMessage('7206479844', 'Test again');
+	sendWhatsappMessage('7206479844', 'App-a-thon!!');
 	res.json({message: 'trying'});
 });
 
