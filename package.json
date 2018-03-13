@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Varun Kumar <varunon9@gmail.com>",
+  "author": "InGoibibo Team",
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.16.0",
